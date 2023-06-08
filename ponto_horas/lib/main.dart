@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(RegistroPontoApp());
@@ -15,7 +14,7 @@ class RegistroPontoApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
       supportedLocales: [
-        const Locale('en', 'US'), // Adicione outras localizações, se necessário
+        const Locale('pt', 'BR'), // Adicione outras localizações, se necessário
       ],
       home: RegistroPontoScreen(),
     );
@@ -30,7 +29,7 @@ class RegistroPontoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.ltr, // Defina a direção desejada
+      textDirection: ltr, // Defina a direção desejada
       child: Scaffold(
         appBar: AppBar(
           title: Text('Registro de Ponto'),
@@ -70,8 +69,13 @@ class RegistroPontoScreen extends StatelessWidget {
                     initialDate: DateTime.now(),
                     firstDate: DateTime(2021),
                     lastDate: DateTime(2025),
+                    locale: Locale('pt', 'BR'), // Defina a localização desejada
                   ).then((selectedDate) {
-                    // Lógica para lidar com a data selecionada
+                    if (selectedDate != null) {
+                      String formattedDate =
+                          DateFormat.yMMMMd('pt_BR').format(selectedDate);
+                        //Use formattedDate como necessário
+                    }
                   });
                 },
                 child: Text('Selecionar Data'),
