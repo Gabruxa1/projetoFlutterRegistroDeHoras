@@ -44,6 +44,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   intl_translation: ^0.18.2
+  flutter_calendar_carousel: ^2.3.0
+  flutter_datetime_picker:
+    git:
+      url: https://github.com/Realank/flutter_datetime_picker.git
+  shared_preferences: ^2.0.0
+
+
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
