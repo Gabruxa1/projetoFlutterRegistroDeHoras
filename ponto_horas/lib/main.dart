@@ -5,16 +5,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
-  initializeDateFormatting('pt_BR', null).then((_){
-    runApp(HourTrackerApp());
+  initializeDateFormatting('pt_BR', null).then((_) {
+    runApp(RegistroDeHorasApp());
   });
 }
 
-class HourTrackerApp extends StatelessWidget {
+class RegistroDeHorasApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Hour Tracker',
+      title: 'Registro de Horas',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -29,7 +29,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<WorkDay> workDays = [];
+  List<WorkDay> workDays = [];
   final DateFormat dateFormatter = DateFormat('dd/MM/yyyy', 'pt_BR');
   final DateFormat timeFormatter = DateFormat('HH:mm', 'pt_BR');
   final TextEditingController entryTimeController = TextEditingController();
@@ -48,14 +48,14 @@ class _HomePageState extends State<HomePage> {
     final List<String>? savedWorkDays = prefs.getStringList('workDays');
     if (savedWorkDays != null) {
       setState(() {
-        workDays.addAll(savedWorkDays.map((day) => WorkDay.fromJson(day)));
+        workDays = savedWorkDays.map((day) => WorkDay.fromJson(jsonDecode(day))).toList();
       });
     }
   }
 
   Future<void> _saveWorkDays() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> workDaysJson = workDays.map((day) => day.toJson()).cast<String>().toList();
+    List<String> workDaysJson = workDays.map((day) => jsonEncode(day.toJson())).toList();
     await prefs.setStringList('workDays', workDaysJson);
   }
 
@@ -107,27 +107,31 @@ class _HomePageState extends State<HomePage> {
   void _generateMonthlyReport() {
     double totalHours = _calculateTotalHours();
     double totalSalary = _calculateTotalSalary();
-    String report = 'Monthly Report:\n\n';
+    String report = 'Relatorio Mensal:\n\n';
     report += 'Total Hours: ${totalHours.toStringAsFixed(2)}\n';
     report += 'Total Salary: ${totalSalary.toStringAsFixed(2)}\n\n';
     report += 'Work Days:\n';
     for (var workDay in workDays) {
-      report += 'Entry: ${workDay.entryTime} - Lunch: ${workDay.lunchTime} - Exit: ${workDay.exitTime}\n';
+      report +=
+          '${workDay.date}: ${workDay.entryTime} - ${workDay.exitTime}, Lunch: ${workDay.lunchTime} hours\n';
     }
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Monthly Report'),
-        content: Text(report),
-        actions: [
-          ElevatedButton(
-            child: Text('OK'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
-          ),
-        ],
-      ),
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Relatorio Mensal'),
+          content: Text(report),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Fechar'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -135,107 +139,105 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Hour Tracker'),
+        title: Text('Registro de Horas'),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: entryTimeController,
-                    decoration: InputDecoration(labelText: 'Entry Time'),
-                  ),
-                ),
-                SizedBox(width: 16.0),
-                Expanded(
-                  child: TextField(
-                    controller: lunchTimeController,
-                    decoration: InputDecoration(labelText: 'Lunch Time'),
-                  ),
-                ),
-                SizedBox(width: 16.0),
-                Expanded(
-                  child: TextField(
-                    controller: exitTimeController,
-                    decoration: InputDecoration(labelText: 'Exit Time'),
-                  ),
+      body: ListView.builder(
+        itemCount: workDays.length,
+        itemBuilder: (BuildContext context, int index) {
+          final WorkDay workDay = workDays[index];
+          return ListTile(
+            title: Text(workDay.date),
+            subtitle:
+                Text('Horas Trabalhadas: ${workDay.calculateWorkDuration().toStringAsFixed(2)}'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                IconButton(
+                  icon: Icon(Icons.delete),
+                  onPressed: () {
+                    _removeWorkDay(index);
+                  },
                 ),
               ],
             ),
-          ),
-          ElevatedButton(
-            child: Text('Add Work Day'),
-            onPressed: _addWorkDay,
-          ),
-          SizedBox(height: 16.0),
-          Expanded(
-            child: ListView.builder(
-              itemCount: workDays.length,
-              itemBuilder: (ctx, index) {
-                final workDay = workDays[index];
-                return ListTile(
-                  title: Text('Entry: ${workDay.entryTime} - Exit: ${workDay.exitTime}'),
-                  subtitle: Text('Lunch: ${workDay.lunchTime}'),
-                  trailing: IconButton(
-                    icon: Icon(Icons.delete),
-                    onPressed: () => _removeWorkDay(index),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.calculate),
-        onPressed: _generateMonthlyReport,
+        child: Icon(Icons.add),
+        onPressed: () {
+          _showAddWorkDayDialog();
+        },
       ),
-      persistentFooterButtons: [
-        ElevatedButton(
-          child: Text('Set Hourly Rate'),
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: Text('Hourly Rate'),
-                content: TextField(
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) {
-                    setState(() {
-                      hourlyRate = double.parse(value);
-                    });
-                  },
-                ),
-                actions: [
-                  ElevatedButton(
-                    child: Text('Cancel'),
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                    },
-                  ),
-                  ElevatedButton(
-                    child: Text('Save'),
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                    },
-                  ),
-                ],
+      bottomNavigationBar: BottomAppBar(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Text('Total Hours: ${_calculateTotalHours().toStringAsFixed(2)}'),
+              ElevatedButton(
+                child: Text('Relatorio Geral'),
+                onPressed: () {
+                  _generateMonthlyReport();
+                },
               ),
-            );
-          },
+            ],
+          ),
         ),
-      ],
+      ),
+    );
+  }
+
+  void _showAddWorkDayDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Adicionar Dia de Trabalho'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: entryTimeController,
+                decoration: InputDecoration(labelText: 'Hora de Entrada'),
+              ),
+              TextField(
+                controller: lunchTimeController,
+                decoration: InputDecoration(labelText: 'Tempo de Pausa'),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: exitTimeController,
+                decoration: InputDecoration(labelText: 'Hora de Saída'),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Cancelar'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text('Adicionar'),
+              onPressed: () {
+                _addWorkDay();
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
 class WorkDay {
-  final String entryTime;
-  final String lunchTime;
-  final String exitTime;
+  String entryTime;
+  String lunchTime;
+  String exitTime;
 
   WorkDay({
     required this.entryTime,
@@ -243,13 +245,20 @@ class WorkDay {
     required this.exitTime,
   });
 
-  factory WorkDay.fromJson(String json) {
-    final Map<String, dynamic> data = Map<String, dynamic>.from(jsonDecode(json));
-    return WorkDay(
-      entryTime: data['entryTime'],
-      lunchTime: data['lunchTime'],
-      exitTime: data['exitTime'],
-    );
+  String get date {
+    final DateTime now = DateTime.now();
+    return DateFormat('dd/MM/yyyy').format(now);
+  }
+
+  double calculateWorkDuration() {
+    final DateTime entry = DateTime.parse('2000-01-01 ${this.entryTime}');
+    final DateTime exit = DateTime.parse('2000-01-01 ${this.exitTime}');
+    final int lunchMinutes = int.parse(this.lunchTime);
+
+    Duration workDuration = exit.difference(entry);
+    workDuration -= Duration(minutes: lunchMinutes);
+
+    return workDuration.inMinutes / 60.0;
   }
 
   Map<String, dynamic> toJson() {
@@ -260,10 +269,11 @@ class WorkDay {
     };
   }
 
-  double calculateWorkDuration() {
-    final Duration workDuration = DateTime.parse('2023-01-01 ${exitTime}').difference(DateTime.parse('2023-01-01 ${entryTime}'));
-    final Duration lunchDuration = Duration(minutes: lunchTime.isEmpty ? 0 : int.parse(lunchTime.split(':')[1]));
-    final Duration totalDuration = workDuration - lunchDuration;
-    return totalDuration.inMinutes / 60;
+  factory WorkDay.fromJson(Map<String, dynamic> json) {
+    return WorkDay(
+      entryTime: json['entryTime'],
+      lunchTime: json['lunchTime'],
+      exitTime: json['exitTime'],
+    );
   }
 }
