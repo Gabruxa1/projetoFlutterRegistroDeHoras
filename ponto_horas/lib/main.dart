@@ -237,6 +237,7 @@ void loadRegistros() async {
     valorTotal = totalHorasTrabalhadas.inHours * valorHora;
     saveRegistros();
     });
+  saveRegistros();
   }
 
 void editRegistro(Registro registro, TimeOfDay novoInicio, TimeOfDay novoFim) {
