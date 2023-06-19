@@ -8,6 +8,8 @@ import 'package:pdf/widgets.dart' as pdfWidgets;
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:open_file/open_file.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   initializeDateFormatting('pt_BR', null).then((_) {
@@ -56,14 +58,48 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
   Duration totalHorasTrabalhadas = Duration();
   double valorTotal = 0.0;
 
-  @override
-  void initState() {
-    super.initState();
-    selectedDate = DateTime.now();
-    selectedStartTime = TimeOfDay.now();
-    lunchDuration = Duration();
-    selectedEndTime = TimeOfDay.now();
+@override
+void initState() {
+  super.initState();
+  selectedDate = DateTime.now();
+  selectedStartTime = TimeOfDay.now();
+  lunchDuration = Duration();
+  selectedEndTime = TimeOfDay.now();
+  loadRegistros();
+}
+
+  void saveRegistros() async {
+  final prefs = await SharedPreferences.getInstance();
+  final encodedRegistros = registros.map((registro) {
+    return {
+      'data': registro.data.toIso8601String(),
+      'inicio': registro.inicio.format(context),
+      'fim': registro.fim.format(context),
+      'intervalo': registro.intervalo.inMinutes,
+      'total': registro.total.inMinutes,
+    };
+  }).toList();
+  prefs.setString('registros', json.encode(encodedRegistros));
+}
+
+void loadRegistros() async {
+  final prefs = await SharedPreferences.getInstance();
+  final encodedRegistros = prefs.getString('registros');
+  if (encodedRegistros != null) {
+    final decodedRegistros = json.decode(encodedRegistros);
+    setState(() {
+      registros = decodedRegistros.map<Registro>((registro) {
+        return Registro(
+          data: DateTime.parse(registro['data']),
+          inicio: TimeOfDay.fromDateTime(DateTime.parse(registro['inicio'])),
+          fim: TimeOfDay.fromDateTime(DateTime.parse(registro['fim'])),
+          intervalo: Duration(minutes: registro['intervalo']),
+          total: Duration(minutes: registro['total']),
+        );
+      }).toList();
+    });
   }
+}
 
   void selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -166,6 +202,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
       selectedRegistro = newRegistro;
       totalHorasTrabalhadas += totalDuration;
       valorTotal = totalHorasTrabalhadas.inHours * valorHora;
+      saveRegistros();
     });
   }
 
@@ -199,6 +236,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
         registros.clear();
         totalHorasTrabalhadas = Duration();
         valorTotal = 0.0;
+        saveRegistros();
       });
     }
   }
