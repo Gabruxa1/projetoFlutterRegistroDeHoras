@@ -3,14 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
-//import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pdfWidgets;
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:open_file/open_file.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
 
 void main() {
   initializeDateFormatting('pt_BR', null).then((_) {
@@ -58,6 +56,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
   double valorHora = 0.0;
   Duration totalHorasTrabalhadas = Duration();
   double valorTotal = 0.0;
+  int selectedIndex = -1;
 
 @override
 void initState() {
@@ -88,19 +87,16 @@ void saveRegistros() async {
 
 
 void loadRegistros() async {
-  final directory = await getApplicationDocumentsDirectory();
-  final file = File('${directory.path}/registros.json');
-
-  if (await file.exists()) {
-    final encodedRegistros = await file.readAsString();
+  final prefs = await SharedPreferences.getInstance();
+  final encodedRegistros = prefs.getString('registros');
+  if (encodedRegistros != null) {
     final decodedRegistros = json.decode(encodedRegistros);
-
     setState(() {
       registros = decodedRegistros.map<Registro>((registro) {
         return Registro(
           data: DateTime.parse(registro['data']),
-          inicio: TimeOfDay.fromDateTime(DateTime.parse(registro['inicio'])),
-          fim: TimeOfDay.fromDateTime(DateTime.parse(registro['fim'])),
+          inicio: TimeOfDay(hour: registro['inicio']['hour'], minute: registro['inicio']['minute']),
+          fim: TimeOfDay(hour: registro['fim']['hour'], minute: registro['fim']['minute']),
           intervalo: Duration(minutes: registro['intervalo']),
           total: Duration(minutes: registro['total']),
         );
@@ -108,6 +104,7 @@ void loadRegistros() async {
     });
   }
 }
+
 
 
   void selectDate(BuildContext context) async {
@@ -182,38 +179,115 @@ void loadRegistros() async {
   }
 
   void addRegistro() {
-    final startTime = DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      selectedStartTime.hour,
-      selectedStartTime.minute,
-    );
-    final endTime = DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      selectedEndTime.hour,
-      selectedEndTime.minute,
-    );
-    final totalDuration = endTime.difference(startTime) - lunchDuration;
+  final startTime = DateTime(
+    selectedDate.year,
+    selectedDate.month,
+    selectedDate.day,
+    selectedStartTime.hour,
+    selectedStartTime.minute,
+  );
+  final endTime = DateTime(
+    selectedDate.year,
+    selectedDate.month,
+    selectedDate.day,
+    selectedEndTime.hour,
+    selectedEndTime.minute,
+  );
+  final totalDuration = endTime.difference(startTime) - lunchDuration;
 
-    final newRegistro = Registro(
-      data: selectedDate,
-      inicio: selectedStartTime,
-      fim: selectedEndTime,
-      intervalo: lunchDuration,
-      total: totalDuration,
-    );
+  // Verificar se já existe um registro para a data selecionada
+  final hasDuplicate = registros.any((registro) =>
+      registro.data.year == selectedDate.year &&
+      registro.data.month == selectedDate.month &&
+      registro.data.day == selectedDate.day);
 
-    setState(() {
-      registros.add(newRegistro);
-      selectedRegistro = newRegistro;
-      totalHorasTrabalhadas += totalDuration;
-      valorTotal = totalHorasTrabalhadas.inHours * valorHora;
-      saveRegistros();
+  if (hasDuplicate) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Data já registrada'),
+          content: Text('Já existe um registro para a data selecionada.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+    return;
+  }
+
+  final newRegistro = Registro(
+    data: selectedDate,
+    inicio: selectedStartTime,
+    fim: selectedEndTime,
+    intervalo: lunchDuration,
+    total: totalDuration,
+  );
+
+  setState(() {
+    registros.add(newRegistro);
+    selectedRegistro = newRegistro;
+    totalHorasTrabalhadas += totalDuration;
+    valorTotal = totalHorasTrabalhadas.inHours * valorHora;
+    saveRegistros();
     });
   }
+
+void editRegistro(Registro registro, TimeOfDay novoInicio, TimeOfDay novoFim) {
+  final totalDuration = DateTime(
+    registro.data.year,
+    registro.data.month,
+    registro.data.day,
+    novoFim.hour,
+    novoFim.minute,
+  ).difference(DateTime(
+    registro.data.year,
+    registro.data.month,
+    registro.data.day,
+    novoInicio.hour,
+    novoInicio.minute,
+  )) - registro.intervalo;
+
+  final updatedRegistro = Registro(
+    data: registro.data,
+    inicio: novoInicio,
+    fim: novoFim,
+    intervalo: registro.intervalo,
+    total: totalDuration,
+  );
+
+  setState(() {
+    // Atualize a referência para o novo objeto Registro
+    registros[registros.indexOf(registro)] = updatedRegistro;
+    selectedRegistro = updatedRegistro;
+
+    totalHorasTrabalhadas = Duration();
+    for (var reg in registros) {
+      totalHorasTrabalhadas += reg.total;
+    }
+    valorTotal = totalHorasTrabalhadas.inHours * valorHora;
+    saveRegistros();
+  });
+}
+
+
+void deleteRegistro(Registro registro) {
+  setState(() {
+    registros.remove(registro);
+    totalHorasTrabalhadas -= registro.total;
+    valorTotal = totalHorasTrabalhadas.inHours * valorHora;
+    selectedRegistro = null;
+    saveRegistros();
+  });
+}
+
+
 
   void deleteAllRegistros() async {
     final confirmed = await showDialog<bool>(
@@ -250,6 +324,7 @@ void loadRegistros() async {
     }
     saveRegistros();
   }
+
 
   void generatePDF(BuildContext context) async {
   final pdf = pdfWidgets.Document();
@@ -312,8 +387,8 @@ void loadRegistros() async {
 }
 
 
-  @override
-  Widget build(BuildContext context) {
+    @override
+    Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Registro de Horas'),
@@ -421,6 +496,7 @@ void loadRegistros() async {
                       itemBuilder: (BuildContext context, int index) {
                         final registro = registros[index];
                         return ListTile(
+                          key: Key(registro.data.toString()),
                           title: Text(
                             DateFormat('dd/MM/yyyy').format(registro.data),
                           ),
@@ -429,10 +505,16 @@ void loadRegistros() async {
                           ),
                           onTap: () {
                             setState(() {
-                              selectedRegistro = registro;
+                              selectedIndex = index;
                             });
                           },
-                          selected: selectedRegistro == registro,
+                          selected: selectedIndex == index,
+                          trailing: IconButton(
+                            icon: Icon(Icons.edit),
+                            onPressed: () {
+                              editRegistro(registro, selectedStartTime, selectedEndTime);
+                            },
+                          ),
                         );
                       },
                     ),
@@ -462,6 +544,20 @@ void loadRegistros() async {
                         Text(
                           'Total: ${selectedRegistro!.total.inHours} horas',
                         ),
+                        SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () {
+                            editRegistro(selectedRegistro!, selectedStartTime, selectedEndTime);
+                          },
+                          child: Text('Editar'),
+                        ),
+                        SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () {
+                            deleteRegistro(selectedRegistro!);
+                          },
+                          child: Text('Excluir'),
+                        ),
                       ],
                     ),
                 ],
@@ -478,7 +574,6 @@ void loadRegistros() async {
     );
   }
 }
-
 class Registro {
   final DateTime data;
   final TimeOfDay inicio;
