@@ -10,6 +10,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:open_file/open_file.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   initializeDateFormatting('pt_BR', null).then((_) {
@@ -68,8 +69,10 @@ void initState() {
   loadRegistros();
 }
 
-  void saveRegistros() async {
-  final prefs = await SharedPreferences.getInstance();
+void saveRegistros() async {
+  final directory = await getApplicationDocumentsDirectory();
+  final file = File('${directory.path}/registros.json');
+
   final encodedRegistros = registros.map((registro) {
     return {
       'data': registro.data.toIso8601String(),
@@ -79,14 +82,19 @@ void initState() {
       'total': registro.total.inMinutes,
     };
   }).toList();
-  prefs.setString('registros', json.encode(encodedRegistros));
+
+  await file.writeAsString(json.encode(encodedRegistros));
 }
 
+
 void loadRegistros() async {
-  final prefs = await SharedPreferences.getInstance();
-  final encodedRegistros = prefs.getString('registros');
-  if (encodedRegistros != null) {
+  final directory = await getApplicationDocumentsDirectory();
+  final file = File('${directory.path}/registros.json');
+
+  if (await file.exists()) {
+    final encodedRegistros = await file.readAsString();
     final decodedRegistros = json.decode(encodedRegistros);
+
     setState(() {
       registros = decodedRegistros.map<Registro>((registro) {
         return Registro(
@@ -100,6 +108,7 @@ void loadRegistros() async {
     });
   }
 }
+
 
   void selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -239,6 +248,7 @@ void loadRegistros() async {
         saveRegistros();
       });
     }
+    saveRegistros();
   }
 
   void generatePDF(BuildContext context) async {
